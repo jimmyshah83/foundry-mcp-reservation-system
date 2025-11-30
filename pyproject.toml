@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "foundry-mcp-reservation-system"
+version = "0.1.0"
+description = "A reservation system with booking and recommendation capabilities"
+requires-python = ">=3.8"
+dependencies = [
+    "azure-ai-ml",
+    "azure-identity",
+    "pandas",
+    "numpy",
+]
+
+[tool.setuptools]
+py-modules = []
