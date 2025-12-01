@@ -12,6 +12,8 @@ dependencies = [
     "azure-identity",
     "pandas",
     "numpy",
+    "mlflow",
+    "torch",
 ]
 
 [tool.setuptools]
