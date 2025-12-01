@@ -6,7 +6,9 @@ This notebook trains a time-series forecasting model for retail sales using Azur
 
 - Azure ML Workspace access
 - Azure CLI installed and logged in (`az login`)
-- Storage Blob Data Contributor role on the workspace storage account
+- Required roles on the workspace storage account:
+  - **Storage Blob Data Contributor**
+  - **Storage File Data Privileged Contributor**
 
 ## Data Upload (Manual Step Required)
 
@@ -61,18 +63,72 @@ The Azure ML workspace has an Azure Policy that disables key-based authenticatio
 
 The workaround uses `az storage blob upload-batch --auth-mode login` which authenticates using your Azure AD identity (OAuth) instead of SAS tokens.
 
+## Identity-Based Datastore Setup
+
+The default `workspaceblobstore` datastore is configured to use Account Key authentication, which fails when key-based auth is disabled. To browse data in ML Studio and use the data in jobs, create an identity-based datastore:
+
+### Create Identity-Based Datastore
+
+```bash
+# Create a YAML file for the identity-based datastore
+cat > /tmp/datastore-identity.yaml << 'EOF'
+$schema: https://azuremlschemas.azureedge.net/latest/azureBlob.schema.json
+name: workspaceblobstore_identity
+type: azure_blob
+account_name: mldemowkspwus02609576373
+container_name: azureml-blobstore-cff56e3a-d016-4526-aa58-71c460675066
+EOF
+
+# Create the datastore (no credentials = uses Azure AD identity)
+az ml datastore create --file /tmp/datastore-identity.yaml \
+  --resource-group admin-rg \
+  --workspace-name ml-demo-wksp-wus-01
+```
+
+### Browse Data in ML Studio
+
+1. Go to [Azure ML Studio](https://ml.azure.com)
+2. Navigate to **Data** → **Datastores**
+3. Click on **workspaceblobstore_identity** (the identity-based datastore)
+4. Click **Browse** to see uploaded data:
+   - `retail-training-data/`
+   - `retail-validation-data/`
+
+### Reference Data in Notebook
+
+The notebook uses the identity-based datastore to reference data:
+
+```python
+my_training_data_input = Input(
+    type=AssetTypes.MLTABLE, 
+    path="azureml://datastores/workspaceblobstore_identity/paths/retail-training-data"
+)
+```
+
 ## Troubleshooting
 
 ### Error: KeyBasedAuthenticationNotPermitted
 This error occurs when trying to upload via the Python SDK. Use the Azure CLI commands above instead.
 
+### Error: You don't have permissions to access this datastore
+This occurs when browsing `workspaceblobstore` in ML Studio because it uses Account Key auth. Use the identity-based datastore `workspaceblobstore_identity` instead (see Identity-Based Datastore Setup above).
+
 ### Error: Storage Blob Data Contributor role required
-Ensure you have the correct role:
+Ensure you have both required roles:
 ```bash
+# Storage Blob Data Contributor
 az role assignment create \
   --role "Storage Blob Data Contributor" \
   --assignee-object-id $(az ad signed-in-user show --query id -o tsv) \
-  --scope /subscriptions/<subscription-id>/resourceGroups/admin-rg/providers/Microsoft.Storage/storageAccounts/mldemowkspwus02609576373
+  --assignee-principal-type User \
+  --scope /subscriptions/57123c17-af1a-4ec2-9494-a214fb148bf4/resourceGroups/admin-rg/providers/Microsoft.Storage/storageAccounts/mldemowkspwus02609576373
+
+# Storage File Data Privileged Contributor
+az role assignment create \
+  --role "Storage File Data Privileged Contributor" \
+  --assignee-object-id $(az ad signed-in-user show --query id -o tsv) \
+  --assignee-principal-type User \
+  --scope /subscriptions/57123c17-af1a-4ec2-9494-a214fb148bf4/resourceGroups/admin-rg/providers/Microsoft.Storage/storageAccounts/mldemowkspwus02609576373
 ```
 
 ### Error: Public network access disabled
