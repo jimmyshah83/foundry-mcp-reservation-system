@@ -105,6 +105,49 @@ my_training_data_input = Input(
 )
 ```
 
+## Compute Cluster Storage Access
+
+When running AutoML jobs, the compute cluster uses its managed identity to access storage - not your user identity. You must grant the compute cluster and workspace managed identities access to the storage account.
+
+### Grant Compute Cluster Access
+
+```bash
+# Get the compute cluster's managed identity principal ID
+COMPUTE_IDENTITY=$(az ml compute show --name teslat4-gpu-wus \
+  --resource-group admin-rg \
+  --workspace-name ml-demo-wksp-wus-01 \
+  --query "identity.principal_id" -o tsv)
+
+echo "Compute identity: $COMPUTE_IDENTITY"
+
+# Grant Storage Blob Data Contributor to the compute cluster
+az role assignment create \
+  --role "Storage Blob Data Contributor" \
+  --assignee-object-id $COMPUTE_IDENTITY \
+  --assignee-principal-type ServicePrincipal \
+  --scope /subscriptions/57123c17-af1a-4ec2-9494-a214fb148bf4/resourceGroups/admin-rg/providers/Microsoft.Storage/storageAccounts/mldemowkspwus02609576373
+```
+
+### Grant Workspace Managed Identity Access
+
+```bash
+# Get the workspace's managed identity principal ID
+WORKSPACE_IDENTITY=$(az ml workspace show --name ml-demo-wksp-wus-01 \
+  --resource-group admin-rg \
+  --query "identity.principal_id" -o tsv)
+
+echo "Workspace identity: $WORKSPACE_IDENTITY"
+
+# Grant Storage Blob Data Contributor to the workspace
+az role assignment create \
+  --role "Storage Blob Data Contributor" \
+  --assignee-object-id $WORKSPACE_IDENTITY \
+  --assignee-principal-type ServicePrincipal \
+  --scope /subscriptions/57123c17-af1a-4ec2-9494-a214fb148bf4/resourceGroups/admin-rg/providers/Microsoft.Storage/storageAccounts/mldemowkspwus02609576373
+```
+
+**Note:** Role assignments can take 2-5 minutes to propagate. Wait before resubmitting the job.
+
 ## Troubleshooting
 
 ### Error: KeyBasedAuthenticationNotPermitted
@@ -139,4 +182,13 @@ az storage account update \
   --resource-group admin-rg \
   --public-network-access Enabled
 ```
+
+### Error: Permission denied when accessing MLTable during job execution
+```
+PermissionDenied(Some(This request is not authorized to perform this operation using this permission.))
+```
+
+This occurs when the compute cluster's managed identity doesn't have access to the storage account. The job runs as the compute cluster's identity, not your user identity.
+
+**Solution:** Grant the compute cluster and workspace managed identities access to storage. See the "Compute Cluster Storage Access" section above.
 
